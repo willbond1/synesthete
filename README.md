@@ -6,4 +6,4 @@ TODO:
 - extract FFT features from audio signal
 - output array of colors using FFT features
 - output color array to LED strip
-- input/output data to SSD from ARM Processor
+- input/output data to SD from ARM Processor
