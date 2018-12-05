@@ -1,9 +1,41 @@
 #include "mbed.h"
+#include "SDFileSystem.h"
+#include "WAV_Reader.h"
 
 //TODO 1: read data from SD card 
+//FIXME: copied example below, unedited
+//Create an SDFileSystem object
+// DigitalOut led_strip(p18); //TODO: get actual output type and pin(s)
+SDFileSystem sd(p5, p6, p7, p20, "sd");
+WAV_Reader wav();
 
-//TODO 2: open and read song
+int main()
+{
+    //Mount the filesystem
+    sd.mount();
 
-//TODO 3: take the audio in the buffer and apply some feature function to it
+    //Perform a read test
+    printf("Reading from SD card...");
+    fp = fopen("/sd/sdtest.txt", "r"); // TODO: find a song in SD card and put its name here
+    if (fp != NULL) {
+        //TODO 2: open and read song
+        wav.open(fp);
+        if (wav.read(buffer, size, len))
+            //TODO 3: take the audio in the buffer and apply some feature function to it
+            
+            //TODO 4: output the altered audio data to the LED strip
+            
+        
+//        char c = fgetc(fp);
+//        if (c == 'W')
+//            printf("success!\n");
+//        else
+//            printf("incorrect char (%c)!\n", c);
+        fclose(fp);
+    } else {
+        printf("failed!\n");
+    }
 
-//TODO 4: output the altered audio data to the LED strip
+    //Unmount the filesystem
+    sd.unmount();
+}
