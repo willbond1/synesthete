@@ -5,8 +5,8 @@
 //TODO 1: read data from SD card 
 //FIXME: copied example below, unedited
 //Create an SDFileSystem object
-// DigitalOut led_strip(p18); //TODO: get actual output type and pin(s)
-SDFileSystem sd(p5, p6, p7, p20, "sd");
+// DigitalOut led_strip(p15); //TODO: get actual output type and pin(s)
+SDFileSystem sd(p11, p12, p13, p14, "sd");
 WAV_Reader wav();
 
 int main()
