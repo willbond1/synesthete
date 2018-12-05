@@ -1,12 +1,9 @@
 #include "mbed.h"
 
-DigitalOut myled(LED1);
+//TODO 1: read data from SD card 
 
-int main() {
-    while(1) {
-        myled = 1;
-        wait(0.2);
-        myled = 0;
-        wait(0.2);
-    }
-}
+//TODO 2: open and read song
+
+//TODO 3: take the audio in the buffer and apply some feature function to it
+
+//TODO 4: output the altered audio data to the LED strip
