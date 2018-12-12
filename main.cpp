@@ -1,122 +1,206 @@
-#include "mbed.h"
-#include <errno.h>
+/*
+ * WAV_Reader.cpp
+ *
+ *  Created on: 23 Feb 2017
+ *      Author: ML15AAF
+ */
 
-#include "SDBlockDevice.h"
-#include "FATFileSystem.h"
+#include <WAV_Reader.h>
 
-#include "WAV_Reader.h"
+WAV_Reader::Config::Config() {
+    format_tag = 0;
+    channels = 0;
+    samples_per_sec = 0;
+    avg_bytes_per_sec = 0;
+    block_align = 0;
+    bits_per_sample = 0;
+    data_pos = 0;
+    data_length = 0;
+    file_size = 0;
+}
 
-//TODO 1: read data from SD card 
-//FIXME: copied example below, unedited
-//Create an SDFileSystem object
-DigitalOut myled(LED1); // test light
-SDBlockDevice bd(p11, p12, p13, p14); // uses spi pins
-FATFileSystem fs("sd");
+WAV_Reader::WAV_Reader() :
+        fpp(NULL), _current_pos(0), _loop(false) {
 
-#define LED_NUM 30 // number of LEDs
-#define LED_FREQ 500000 // spi
-SPI led_spis(p5, p6, p7)
-int led_buf[LED_NUM];
+}
 
-WAV_Reader wav();
+int WAV_Reader::open(FILE **filepp) {
+    int success = 0;
+
+    fpp = filepp;
+
+    if (*filepp != NULL) {
+        if (check_bytes(*fpp, "RIFF", 4)) {
+            if (check_bytes(*fpp, "WAVE", 4, 8)) {
+                config.file_size = read_num(*fpp, 4, 4);
+
+                int chunk_pos = find_chunk(*fpp, "fmt ", config.file_size, 12);
+
+                if (chunk_pos != -1) {
+                    config.format_tag = read_num(*fpp, 2, chunk_pos + 8);
+                    config.channels = read_num(*fpp, 2, chunk_pos + 10);
+                    config.samples_per_sec = read_num(*fpp, 4, chunk_pos + 12);
+                    config.avg_bytes_per_sec = read_num(*fpp, 4, chunk_pos + 16);
+                    config.block_align = read_num(*fpp, 2, chunk_pos + 20);
+                    config.bits_per_sample = read_num(*fpp, 2, chunk_pos + 22);
+                } else success = WAV_READER_FO_NO_FMT;
+
+                chunk_pos = find_chunk(*fpp, "data", config.file_size, 12);
+
+                if (chunk_pos != -1) {
+                    config.data_length = read_num(*fpp, 4, chunk_pos + 4);
+                    config.data_pos = chunk_pos + 8;
+                    reset();
+
+                } else success = success + WAV_READER_FO_NO_DATA;
+
+                if (success == 0) success = config.data_length;
+
+            } else success = WAV_READER_FO_NOT_WAV;
+        } else success = WAV_READER_FO_NOT_RIFF;
+    } else success = WAV_READER_FO_NULL_PTR;
 
 
-int main()
-{
-    // Try to mount the filesystem
-    int err = fs.mount(&bd);
-    if (err) {
-        // Reformat if we can't mount the filesystem
-        // this should only happen on the first boot
-        fflush(stdout);
-        err = fs.reformat(&bd);
-        if (err) {
-            error("error: %s (%d)\n", strerror(-err), err);
+
+    return success;
+}
+
+int WAV_Reader::read(int buff[], int size, int len) { // buffer is what we will access to perform our fft
+    int data_left = config.data_length - _current_pos;
+    int to_read = len*size;
+
+    if (to_read > data_left) {
+        if (data_left == 0 && _loop) {
+            reset();
+        } else {
+            to_read = data_left;
         }
     }
-    // Open the wav file
-    FILE *f = fopen("/sd/test.wav", "r");
-    if (!f) {
-        // Create the numbers file if it doesn't exist
-        if (!f) {
-            error("error: %s (%d)\n", strerror(errno), -errno);
-        }
-        for (int i = 0; i < 10; i++) {
-            err = fprintf(f, "    %d\n", i);
-            if (err < 0) {
-                error("error: %s (%d)\n", strerror(errno), -errno);
-            }
-        }
-        err = fseek(f, 0, SEEK_SET);
-        }
+
+    char* bytes = new char[to_read];
+    size_t read_bytes = fread(bytes, 1, to_read, *fpp);
+    read_bytes -= read_bytes % size;
+    int count = 0;
+    for (int i = 0; i < read_bytes; i += size){
+    	buff[count++] = get_num(bytes+i, size);
     }
-    
-    //TODO 2: open and read song
-    wav.open(f);
-    wav.loop(true);
-    //TODO: determine length
-    // Note: there are 30 LEDs in the strip we have
-    int window = 5; // how many audio signals will be in each window
-    int len = 90; // the length of the buffer
-    int size = sizeof(char); // the size of the elements in the buffer
-    int *buf = (char *) malloc(len*size);// the buffer to put the audio signal into
-    
-    while (wav.read(buf, size, len)) {
-        //TODO 3: take the audio in the buffer and apply some feature function to it
-        int i = 0;
-        int tri_signals = [LED_NUM][3] // a value for r,g,b
-        while i < num_leds {
-            int sigR = buf[i];
-            int sigG = buf[i+1];
-            int sigB = buf[i+2];
-            tri_signals[i][0] = sigR;
-            tri_signals[i][1] = sigG;
-            tri_signals[i][2] = sigB;
-            }
-        }
-        brightness = 10// is between 0 and 31
-        //TODO 4: output the altered audio data to the LED strip
-        int i;
-        
-        spi.frequency(LED_FREQ); //TODO: replace with custom frequency
-        
-        for (i = 0; i < LED_NUM; i ++) {
-            led_buf[i] = (tri_signals[i][0] << 4) | (tri_signal[i][1] << 2) | (tri_signal[i][2]);// 0xffffff = white, (think RGB)
-        }
-        
-        //DOTSTAR
-        int i;
-        
-        // start frame
-        for (i = 0; i < 4; i ++) {
-            spi.write(0);
-        }
-        // led frame
-        for (i = 0; i < LED_NUM; i ++) {
-            spi.write((7<<5) | brightness);
-            spi.write((led_buf[i] >> 16) & 0xff); // B
-            spi.write((led_buf[i] >> 8) & 0xff); // G
-            spi.write(led_buf[i] & 0xff); // R
-        }
-        // end frame
-        for (i = 0; i < 4; i ++) {
-            spi.write(1);
-        }
-        myled = !myled;
-        wait(0.05);
-    }
-        
-        
-//        char c = fgetc(fp);
-//        if (c == 'W')
-//            printf("success!\n");
-//        else
-//            printf("incorrect char (%c)!\n", c);
-    err = fclose(f);
-    if (err < 0) {
-        error("error: %s (%d)\n", strerror(errno), -errno);
+    delete[] bytes;
+    move_read_position(read_bytes, _current_pos);
+
+    to_read = len*size - read_bytes;
+    if (to_read > 0 && _loop) {
+        read_bytes += read(buff + read_bytes/size, size, to_read);
     }
 
-    //Unmount the filesystem
-    fs.unmount();
+    return read_bytes;
+}
+
+void WAV_Reader::reset() {
+    seek(0, 0);
+}
+
+bool WAV_Reader::loop() {
+    return _loop;
+}
+
+void WAV_Reader::loop(bool enable) {
+    _loop = enable;
+}
+
+void WAV_Reader::seek(int num, int start) {
+    if (start < 0) start = _current_pos;
+    move_read_position(num, start);
+    fseek(*fpp, _current_pos + config.data_pos, SEEK_SET);
+}
+
+uint16_t WAV_Reader::channels() {
+    return config.channels;
+}
+
+uint32_t WAV_Reader::samples_per_sec() {
+    return config.samples_per_sec;
+}
+
+uint32_t WAV_Reader::bytes_per_sec() {
+	return config.avg_bytes_per_sec;
+}
+
+uint16_t WAV_Reader::block_align() {
+    return config.block_align;
+}
+
+uint16_t WAV_Reader::bits_per_sample() {
+    return config.bits_per_sample;
+}
+
+uint32_t WAV_Reader::data_length() {
+	return config.data_length;
+}
+
+/** Private **/
+
+int WAV_Reader::read_bytes(FILE *fp, char* out, int len_to_read, int start_off) {
+    fseek(fp, start_off, SEEK_SET);
+
+    for (int i = 0; i < len_to_read; i++) {
+        out[i] = fgetc(fp);
+    }
+
+    return len_to_read;
+
+}
+
+bool WAV_Reader::check_bytes(FILE *fp, char* check, int len, int start) {
+    bool success = false;
+    char extracted[len + 1];
+
+    read_bytes(fp, extracted, len, start);
+    extracted[len] = 0;
+
+    success = strcmp(extracted, check) == 0;
+
+    return success;
+}
+
+uint32_t WAV_Reader::read_num(FILE *fp, int len, int start) {
+    char extracted[len];
+    read_bytes(fp, extracted, len, start);
+
+    return get_num(extracted, len);
+}
+
+uint32_t WAV_Reader::get_num(char input[], int byte_count) {
+
+    uint32_t output = 0;
+    for (int i = 0; i < byte_count; i++) {
+        // numbers are stored least significant byte. So reverse and add to find the number
+        output += input[i] << (i * 8);
+    }
+
+    return output;
+
+}
+
+int WAV_Reader::find_chunk(FILE *fp, char* check, int max_len, int start) {
+    int result = -1;
+
+    int pos = start;
+
+    while ((pos + 8) < max_len && result == -1) {
+        if (check_bytes(fp, check, 4, pos)) result = pos;
+        else pos += read_num(fp, 4, pos + 4) + 8;
+    }
+
+    return result;
+
+}
+
+int WAV_Reader::move_read_position(int count, int start) {
+    _current_pos = start + count;
+    if (_current_pos > config.data_length) {
+        if (loop()) _current_pos %= config.data_length;
+        else _current_pos = config.data_length;
+    }
+
+    return _current_pos;
 }
